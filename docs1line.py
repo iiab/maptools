@@ -2,6 +2,7 @@
 # print the second line in each file in this directory to stdout
 import glob
 import os
+#import pdb;pdb.set_trace()
 
 flist = glob.glob("./*")
 for f in sorted(flist):
@@ -10,9 +11,10 @@ for f in sorted(flist):
    if os.path.isfile(f):
       with open(f,"r") as fd:
          lines = fd.readlines()
-         if len(lines) == 0: continue
+         if len(lines) < 2: continue
          if len(lines[lineno]) == 0 or lines[lineno][0] != '#': 
             lineno += 1
             continue
-         print("%s -- %s"%(f,lines[lineno][:-1]))
+         if lineno > 4: continue
+         print("%20s -- %s"%(f,lines[lineno][:-1]))
 
