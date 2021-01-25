@@ -16,7 +16,7 @@ with open(CATALOG,'r') as catalog_fp:
       print("json error reading map-catalog.json")
       sys.exit(1)
 
-#target = EXTRACT_DIR + '/iiab.csv'
+#target = EXTRACT_DIR + '/data/iiab.csv'
 #with open(target,'w') as csv_fp:
 #csv_fp.write(headers)
 
