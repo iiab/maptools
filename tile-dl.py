@@ -22,9 +22,9 @@ from download import MBTiles, WMTS, fetch_quad_for
 import shutil
 import json
 import time
-from io import StringIO
+import io 
 from PIL import Image
-import ipdb; ipdb.set_trace()
+#import ipdb; ipdb.set_trace()
 
 # GLOBALS
 mbTiles = object
@@ -52,6 +52,7 @@ def parse_args():
     parser.add_argument("--lat", help="Latitude degrees.",type=float)
     parser.add_argument("--lon", help="Longitude degrees.",type=float)
     parser.add_argument("-r","--radius", help="Download within this radius(km).",type=float)
+    parser.add_argument("-t","--topzoom", help= 'Top Zoom',default=9,type=int)
     parser.add_argument("-g", "--get", help='get WMTS tiles from this URL(Default: Sentinel Cloudless).')
     parser.add_argument("-s", "--summarize", help="Data about each zoom level.",action="store_true")
     return parser.parse_args()
@@ -143,7 +144,7 @@ def human_readable(num):
             return "%.0f%s"%(num,units[i])
         num /= 1000.0
 
-def bounds(lat_deg,lon_deg,radius_km,zoom=13):
+def region_bounds(lat_deg,lon_deg,radius_km,zoom=13):
    n = 2.0 ** zoom
    tile_kmeters = earth_circum / n
    #print('tile dim(km):%s'%tile_kmeters)
@@ -249,7 +250,8 @@ def scan_verify():
                replace = False
                raw = mbTiles.GetTile(zoom, tileX, tileY)
                try:
-                  image = Image.open(StringIO.StringIO(raw))
+                  image = Image.open(io.BytesIO(raw))
+
                   ok += 1
                   if len(raw) < 800: 
                      replace=True
@@ -310,7 +312,7 @@ def replace_tile(src,zoom,tileX,tileY):
 def download_tiles(src,lat_deg,lon_deg,zoom,radius):
    global mbTiles
    global total_tiles
-   tileX_min,tileX_max,tileY_min,tileY_max = bounds(lat_deg,lon_deg,radius,zoom)
+   tileX_min,tileX_max,tileY_min,tileY_max = mbtile_limits(zoom)
    for tileX in range(tileX_min,tileX_max+1):
       for tileY in range(tileY_min,tileY_max+1):
          print('tileX:%s tileY:%s'%(tileX,tileY))
@@ -345,7 +347,7 @@ def do_downloads():
       sys.exit(1)
    set_up_target_db(args.name)
    start = time.time()
-   for zoom in range(args.zoom,14):
+   for zoom in range(args.zoom,args.topzoom):
       print("new zoom level:%s"%zoom)
       download_tiles(src,args.lat,args.lon,zoom,args.radius)
    print('Total time:%s Total_tiles:%s'%(time.time()-start,total_tiles))

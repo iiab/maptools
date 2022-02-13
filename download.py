@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
-# Download satellite imagess from Sentinel Cloudless
+# Download satellite images from Sentinel Cloudless
 # notes to set up this exploration
 #  -- the symbolic link satellite.mbtiles is set to source
-#  -- output placed in ./work/sat_<name>.mbtiles
+#  -- output placed in ./work/satellite_z0-z10_<name>.mbtiles
 #  -- just a -z option throw app into viewer mode
 #  -- Use -h for the available options
 
@@ -13,7 +13,7 @@ import sqlite3
 import sys, os
 import argparse
 from PIL import Image
-from io import StringIO
+from io import BytesIO
 import curses
 import certifi
 import urllib3
@@ -25,10 +25,11 @@ import uuid
 import shutil
 from multiprocessing import Process, Lock
 import time
+from datetime import datetime
 
 
 # Download source of satellite imagry
-url =  "https://tiles.maps.eox.at/wmts?layer=s2cloudless-2018_3857&style=default&tilematrixset=g&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}"
+url =  "https://tiles.maps.eox.at/wmts?layer=s2cloudless-2020_3857&style=default&tilematrixset=g&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}"
 ATTRIBUTION = os.environ.get('METADATA_ATTRIBUTION', '<a href="http://openmaptiles.org/" target="_blank">&copy; OpenMapTiles</a> <a href="http://www.openstreetmap.org/about/" target="_blank">&copy; OpenStreetMap contributors</a>')
 VERSION = os.environ.get('METADATA_VERSION', '3.3')
 src = object # the open url source
@@ -40,7 +41,7 @@ mbTiles = object
 args = object
 bounds = {}
 regions = {}
-bbox_zoom_start = 10 
+bbox_zoom_start = 0 
 bbox_limits = {}
 stdscr = object # cursors object for progress feedback
 config_fn = 'config.json'
@@ -85,6 +86,9 @@ class MBTiles():
       self.c.execute(sql)
 
       sql = 'CREATE TABLE IF NOT EXISTS satdata (zoom_level INTEGER,name text,value text)'
+      self.c.execute(sql)
+
+      sql = 'CREATE TABLE IF NOT EXISTS metadata (zoom_level INTEGER,name text,value text)'
       self.c.execute(sql)
 
       sql = 'CREATE VIEW IF NOT EXISTS tiles AS SELECT map.zoom_level AS zoom_level, map.tile_column AS tile_column, map.tile_row AS tile_row, images.tile_data AS tile_data FROM map JOIN images ON images.tile_id = map.tile_id'
@@ -303,7 +307,7 @@ class WMTS(object):
    def __init__(self, template):
       self.template = template
       self.http = urllib3.PoolManager(cert_reqs='CERT_REQUIRED',\
-           ca_certs=certifi.where())
+           ca_certs=certifi.where(),maxsize=10)
 
    def get(self,z,x,y):
       srcurl = "%s"%self.template
@@ -368,17 +372,16 @@ def get_config():
    with open(config_fn,'r') as cf:
      config = json.loads(cf.read())
     
-def set_up_target_db(region):
+def set_up_target_db():
    # create output target, use default input source
    global mbTiles,config,dbpath
-   # destroying object closes any open database
-   mbTiles = None
 
    # attach to the correct output database
-   dbname = 'sat_z%s-z13_%s.mbtiles'%(bbox_zoom_start,args.region)
+   dbname = 'satellite_z%s-z%s_%s.mbtiles'%(bbox_zoom_start,args.zoom,args.date)
    dbpath = './work/%s'%dbname
    if not os.path.exists(dbpath):
       shutil.copyfile(args.mbtiles,dbpath) 
+   print('DESTINATION: %s'%dbpath)
    mbTiles = MBTiles(dbpath)
    mbTiles.CheckSchema()
    mbTiles.get_bounds()
@@ -392,7 +395,7 @@ def set_up_new_target_db(region):
    mbTiles = None
 
    # attach to the correct output database
-   dbname = 'sat_z%s-z13_%s.mbtiles'%(bbox_zoom_start,region)
+   dbname = 'satellite_z%s-z9_%s.mbtiles'%(bbox_zoom_start,args.date)
    dbpath = './work/%s'%dbname
    if not os.path.exists(dbpath):
       mbTiles = MBTiles(dbpath)
@@ -474,8 +477,10 @@ def parse_args():
     parser.add_argument("-d","--dir", help='Output to this directory (use "." for ./work/)')
     parser.add_argument("-e", "--extend", help="Get z10-13.",action="store_true")
     parser.add_argument("-g", "--get", help='get WMTS tiles from this URL(of "." for Sentinel Cloudless).')
+    parser.add_argument("-i", "--inspect", help="Command line inspection.",action="store_true")
     parser.add_argument("-l", "--list", help="List tile sizes.",action="store_true")
     parser.add_argument("-m", "--mbtiles", help="mbtiles filename.")
+    parser.add_argument("-n", "--date", help="mbtiles date component.")
     parser.add_argument("-o", "--onetile", help="Get one tile from source.",action="store_true")
     parser.add_argument("--lat", help="Latitude degrees.",type=float)
     parser.add_argument("--lon", help="Longitude degrees.",type=float)
@@ -516,8 +521,8 @@ def replace_tile(src,zoom,tileX,tileY):
          return False
       else:
          try:
-            image = Image.open(StringIO.StringIO(raw))
-            #image.show(StringIO.StringIO(raw))
+            image = Image.open(BytesIO(raw))
+            #image.show(BytesIO(raw))
          except Exception as e:
             print('exception:%s'%e)
             sys.exit()
@@ -553,8 +558,8 @@ def set_metadata(region):
         top=regions[region]['north'],
         bottom=regions[region]['south'],
         center_zoom=regions[region]['zoom'],
-        min_zoom=10,
-        max_zoom=13)
+        min_zoom=bbox_zoom_start,
+        max_zoom=args.top_zoom)
    outdict = extract.metadata()
    for key in outdict.keys():
       mbTiles.SetMetaData(key,outdict[key])
@@ -602,7 +607,7 @@ def view_tiles(stdscr):
          stdscr.addstr(0,0,'zoom:%s lon:%s lat:%s'%(state['zoom'],state['tileX'],state['tileY']))
          stdscr.addstr(0,40,'Size of tile:%s'%len(raw))
          stdscr.refresh() 
-         image = Image.open(StringIO.StringIO(raw))
+         image = Image.open(BytesIO(raw))
          image.show()
       except Exception as e:  
          stdscr.addstr(1,0,'Exception:%s. x:%s y:%s'%(e,state['tileX'],state['tileY']))
@@ -678,7 +683,7 @@ def bbox_tile_limits(west, south, east, north, zoom):
    return(sw[0],ne[0]+1, ne[1], sw[1]+1)
 
 def record_bbox_debug_info(region):
-   cur_box = regions[region]
+   #cur_box = regions[region]
    for zoom in range(bbox_zoom_start-1,14):
       xmin,xmax,ymin,ymax = bbox_tile_limits(cur_box['west'],cur_box['south'],\
             cur_box['east'],cur_box['north'],zoom)
@@ -775,10 +780,11 @@ def download_region(region):
 def test(region):
 
    set_up_target_db()
-   extend_region(region)
+   download_world(region)
 
-def extend_region(region):
-   record_bbox_debug_info(args.region)
+def download_world(region='world'):
+   #record_bbox_debug_info(args.region)
+   ocean, land, startx, starty, count, done = get_accumulators(bbox_zoom_start)
 
    # Open a WMTS source
    global src # the opened url for satellite images
@@ -787,60 +793,85 @@ def extend_region(region):
    except:
       print('failed to open source')
       sys.exit(1)
-   # Look at tiles we alrady have to predict which to get at zoom+1
+   # Skip over the tiles we alrady have 
    start = start_pd = time.time()
-   for zoom in range(bbox_zoom_start-1,13):
+   for zoom in range(bbox_zoom_start,args.zoom+1):
       print("new zoom level:%s"%zoom)
+      maxY = maxX = numTiles(args.zoom)
 
-      if is_done(zoom + 1): 
-         print('skipping complete zoom level %s'%zoom)
-         continue      
- 
       ocean, land, startx, starty, count, done = get_accumulators(zoom)
       start_pd = time.time()
-      land_pd = land
 
-      for ytile in range(bbox_limits[zoom]['minY'],bbox_limits[zoom]['maxY']+1):
+      for ytile in range(bbox_zoom_start+1,maxY+1):
          mbTiles.SetSatMetaData(zoom,'tileY',str(ytile))
-         for xtile in range(bbox_limits[zoom]['minX'],bbox_limits[zoom]['maxX']+1):
-            if xtile % 20 == 0:
-               mbTiles.SetSatMetaData(zoom,'tileX',str(xtile))
-               if start_pd != time.time():
-                  rate = (land - land_pd) / (time.time() - start_pd)
-                  start_pd = time.time()
-                  land_pd = land
-                  sys.stdout.write('\nRate:%s Ocean:%s Land:%s'%(rate,ocean,land,))
-            if mbTiles.TileExists(zoom,xtile,ytile):
+         land_pd = land
+         ocean_pd = ocean
+         for xtile in range(bbox_zoom_start+1,maxX+1):
+            if not mbTiles.TileExists(zoom,xtile,ytile):
                try:
-                  raw = mbTiles.GetTile(zoom, xtile, ytile)
+                  r = src.get(zoom,xtile,ytile)
                except Exception as e:
-                  print('GetTile Exception. Zoom:%s x:%s y:%s Returned %s'%(zoom,xtile,ytile,str(e)))
-               if len(raw) > threshold:
-                  land += 4
-                  fetch_quad_for(xtile, ytile, zoom)
+                  print(str(e))
+                  sys.exit(1)
+               if r.status == 200:
+                  raw = r.data
+                  line = bytes(raw)
+                  if line.find(b"DOCTYPE") != -1:
+                     print('still getting html from sentinel cloudless')
+                     continue
+                  else:
+                     try:
+                        image = Image.open(BytesIO(raw))
+                        #image.show(BytesIO(raw))
+                     except Exception as e:
+                        print('exception:%s'%e)
+                        sys.exit()
+                     #raw_input("PRESS ENTER")
+                     try:
+                        mbTiles.SetTile(zoom, xtile, ytile, r.data)
+                     except Exception as e:
+                        print('exception:%s'%e)
+                        sys.exit()
+                     land += 1
+                     if land % 50 == 0:
+                         print('+',flush=True,end="")
+                     '''
+                     returned = mbTiles.GetTile(zoom, tileX, tileY)
+                     if bytearray(returned) != r.data:
+                        print('read verify in replace_tile failed')
+                        return False
+                     return True
+                     '''
                else:
-                  ocean += 4
+                   print('status returned:%s X:%s  Y:%s'%(r.status,xtile,ytile))
             else:
-               ocean += 4
-            sys.stdout.write('.')
-         print("ytile row completed:%s."%ytile)
-         print('Total time:%s Total_tiles:%s'%(time.time()-start,land))
+                ocean += 1
+                if ocean % 50 == 0:
+                   print('.',flush=True,end="")
+      print("ytile row completed:%s."%ytile)
+      print('Total time:%s Total_tiles:%s'%(time.time()-start,land))
+      # Print a summary of rate and activitys
+      mbTiles.SetSatMetaData(zoom,'xtile',str(xtile))
+      rate = (land - land_pd) / (time.time() - start_pd)
+      start_pd = time.time()
+      land_pd = land
+      print('\nRate:%s Tiles::%s'%(rate,land,))
          
-      print('zoom %s completed'%zoom)
-      done = True
-      put_accumulators(zoom,ocean,land,count,done)
+   print('zoom %s completed'%zoom)
+   done = True
+   put_accumulators(zoom,ocean,land,count,done)
    ocean, land, startx, starty, count, done = get_accumulators(zoom)
    print('Total time:%s Total_tiles:%s'%(time.time()-start,land))
-   mbTiles.delete_zoom(bbox_zoom_start-1)
+   #mbTiles.delete_zoom(bbox_zoom_start-1)
    set_metadata(region)
 
 def make_sat_extension(region):
    set_up_new_target_db(region)
-   extend_region(region)
+   download_world(region)
 
 def copy_and_extend(region):
    set_up_target_db(region)
-   extend_region(region)
+   download_world(region)
 
 def download(scr):
     global stdscr
@@ -884,7 +915,7 @@ def main():
          args.mbtiles = '%s/satellite.mbtiles'%os.getcwd()
    print(args.mbtiles)
    mbTiles  = MBTiles(args.mbtiles)
-   mbTiles.get_bounds()
+   bounds = mbTiles.get_bounds()
    print('SOURCE mbtiles filename:%s'%args.mbtiles)
 
    if args.summarize:
@@ -895,10 +926,6 @@ def main():
       sys.exit(0)
    if args.list:
       list_tile_sizes()
-      sys.exit(0)
-   # selecting -z zoom but not xy
-   if args.zoom and not args.y:
-      curses.wrapper(view_tiles)
       sys.exit(0)
    if args.lon and args.lat:
       if not args.zoom:
@@ -912,20 +939,19 @@ def main():
       to_dir()
       sys.exit(0)
    if args.region == None:
-      args.region = 'san_jose'
-   if args.extend != None:
-      if args.copy:
-         copy_and_extend(args.region)
-      else:
-         make_sat_extension(args.region)
-      sys.exit(0)
+      args.region = 'world'
+   if args.date == None:
+      args.date = year
    test('san_jose')
    sys.exit()
    curses.wrapper(download) 
    
 
 if __name__ == "__main__":
-   if not os.path.isdir('./work'):
-      os.mkdir('./work')
-    # Run the main routine
-   main()
+       if not os.path.isdir('./work'):
+          os.mkdir('./work')
+       now = datetime.now()
+       year = now.strftime("%Y")
+
+        # Run the main routine
+       main()
