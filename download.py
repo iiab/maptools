@@ -355,6 +355,7 @@ class Extract(object):
             "bounds": self.bounds(),
             "center": self.center(),
             "basename": os.path.basename(self.extract),
+            "scheme": 'tms',
             "filesize": os.path.getsize(self.extract)
         }
 
@@ -486,6 +487,7 @@ def parse_args():
     parser.add_argument("--lon", help="Longitude degrees.",type=float)
     parser.add_argument("-r", "--region", help="Region to operate upon.")
     parser.add_argument("-s", "--summarize", help="Data about each zoom level.",action="store_true")
+    parser.add_argument("-t", "--appendmd", help="Append metadata.",action="store_true")
     parser.add_argument("-x",  help="tileX", type=int)
     parser.add_argument("-y",  help="tileY", type=int)
     parser.add_argument('-z',"--zoom", help="zoom level. (Default=2)", type=int)
@@ -559,11 +561,12 @@ def set_metadata(region):
         bottom=regions[region]['south'],
         center_zoom=regions[region]['zoom'],
         min_zoom=bbox_zoom_start,
-        max_zoom=args.top_zoom)
+        max_zoom=args.zoom)
    outdict = extract.metadata()
    for key in outdict.keys():
       mbTiles.SetMetaData(key,outdict[key])
       # print(key,outdict[key])
+   mbTiles.Commit()
 
 def view_tiles(stdscr):
    # permits viewing of individual image tiles (-x,-y,-y parameters)
@@ -782,6 +785,10 @@ def test(region):
    set_up_target_db()
    download_world(region)
 
+def append_metadata():
+   set_up_target_db()
+   set_metadata('world')
+   
 def download_world(region='world'):
    #record_bbox_debug_info(args.region)
    ocean, land, startx, starty, count, done = get_accumulators(bbox_zoom_start)
@@ -942,6 +949,10 @@ def main():
       args.region = 'world'
    if args.date == None:
       args.date = year
+   if args.appendmd != None:
+      append_metadata()
+      sys.exit(0)
+
    test('san_jose')
    sys.exit()
    curses.wrapper(download) 
