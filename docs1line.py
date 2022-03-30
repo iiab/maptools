@@ -2,6 +2,7 @@
 # print the second line in each file in this directory to stdout
 import glob
 import os
+#import pdb;pdb.set_trace()
 
 flist = glob.glob("./*")
 for f in sorted(flist):

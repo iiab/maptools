@@ -1,5 +1,6 @@
 #!/usr/bin/env  python3
-# read map_catalog.json and write map_catalog.json to stdout
+# Validate map_catalog.json from http://unleashkids.org 
+#   optionally and write map_catalog.json to stdout if uncomment print
 
 import os,sys
 import json
@@ -10,6 +11,7 @@ import requests
 
 MAP_DATE = '2019-10-08'
 CATALOG = './map-catalog.json'
+CATALOG_URL = 'http://d.iiab.io/content/OSM/vector-tiles/map-catalog.json'
 DOWNLOAD_URL = 'https://archive.org/download'
 GENERATED_TILES = '/library/www/html/internetarchive'
 BASE_SATELLITE_SIZE = "976416768"
@@ -45,9 +47,15 @@ def check_url(url):
     return False
 
 outstr = ''
+r = requests.get(CATALOG_URL)
+if r.status_code < 400:
+    map = r.text
+else:
+    print('Failed to open %s'%CATALOG_URL)
+    sys.exit(1)
 with open(CATALOG,'r') as catalog_fp:
    try:
-      map_catalog = json.loads(catalog_fp.read())
+      map_catalog = json.loads(map)
    except:
       print("json error reading regions.json")
       sys.exit(1)
