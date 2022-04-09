@@ -5,22 +5,24 @@ import os
 #import pdb;pdb.set_trace()
 
 flist = glob.glob("./*")
+
 for f in sorted(flist):
    if f[-1:] == '~': continue
-   lineno = 1
+   if f.find('mbtiles') != -1:continue
+
    if os.path.isfile(f):
       with open(f,"r") as fd:
          lines = fd.readlines()
-         #<<<<<<< HEAD
-         if len(lines) < 2 : continue
-         if len(lines[1])== 0: continue
-         if lines[1][0] != '#': continue
-         print("%8s -- %s"%(f,lines[1][:-1]))
-         '''
-         if len(lines) == 0: continue
-         if len(lines[lineno]) == 0 or lines[lineno][0] != '#': 
-            lineno += 1
-            continue
-         print("%s -- %s"%(f,lines[lineno][:-1]))
-         '''
+         lineno = 0
+         for line in iter(lines):
+             lineno += 1
+             if len(line.strip()) < 3: continue
+             if line[0:2] == '#!': continue
+             if line.strip()[0] != '#': continue
+             if len(line) == 0: continue
+             if line.find('coding') != -1:continue
+             if lineno > 10: break
+
+             print("%25s -- %s"%(f,line))
+             break
 
