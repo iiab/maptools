@@ -1,6 +1,15 @@
 #!/usr/bin/env  python3
 # Upload the Regional osm-vector maps to InernetArchive
 
+"""
+Prep for running this program:
+    pip3 install internetarchive
+    pip3 install urllib3
+    pip3 install certifi
+
+    get authentication tokens to ~/.config/ia.ini
+    set PREFIX to location of map mbtiles
+"""
 import os,sys
 import json
 import shutil
@@ -82,7 +91,7 @@ def process_catalog_list(group):
          print('Uploading %s'%mbtile)
          print('MetaData: %s'%md)
          
-         continue
+         #continue
          # upload to archive.org
          try:
             r = internetarchive.upload(identifier, files=[local_mbtile], metadata=md)
@@ -90,9 +99,9 @@ def process_catalog_list(group):
             status = r[0].status_code
          except Exception as e:
             status = 'error'
-            with open('./upload.log','a+') as ao_fp:
+            with open('./work/upload.log','a+') as ao_fp:
                ao_fp.write("Exception from internetarchive:%s"%e) 
-         with open('./upload.log','a+') as ao_fp:
+         with open('./work/upload.log','a+') as ao_fp:
             now = datetime.now()
             date_time = now.strftime("%m/%d/%Y, %H:%M:%S")
             ao_fp.write('Uploaded %s at %s Status:%s\n'%(identifier,date_time,status))
