@@ -15,7 +15,6 @@ import json
 import shutil
 import subprocess
 import internetarchive
-import re
 from datetime import datetime
 import urllib3
 import certifi
@@ -26,8 +25,6 @@ CATALOG_URL = 'https://timmoody.com/iiab-files/maps/map-catalog.json'
 SOURCE_URL_DIR = 'https://timmoody.com/iiab-files/maps'
 
 DOWNLOAD_URL = 'https://archive.org/download'
-GENERATED_TILES = '/library/www/html/internetarchive'
-PLANET_MBTILES = GENERATED_TILES + "/osm_planet_z11-z14_2019.mbtiles"
 PREFIX = '/hd/maps/maps-2020/staged'
 
 def process_catalog_list(group):
