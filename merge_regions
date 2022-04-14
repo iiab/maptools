@@ -1,9 +1,9 @@
 #!/bin/bash -x
 # Combine vector data in mbtiles format
 
-# Combines all tiles from current directory into output/, replacing duplicates
+# Combines all tiles from current directory into target/, replacing duplicates
 #     via a UNIQUE constraint in table index for map on [zoom,x,y].
-# If paramater is given, use as base (inherit the metadata from base).
+# A paramater must be given, to use as base (inherit the metadata from base).
 
 #SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
@@ -25,12 +25,12 @@ esac
 
 # The function of this script that actually does what's wanted
 append_data(){
-   echo "adding $1 to $DEST"
+   echo "adding $append_this to $DEST"
    echo "
    PRAGMA journal_mode=PERSIST;
    PRAGMA page_size=80000;
    PRAGMA synchronous=OFF;
-   ATTACH DATABASE '$1' AS source;
+   ATTACH DATABASE '$append_this' AS source;
    REPLACE INTO map (zoom_level,tile_column,tile_row,tile_id) \
       SELECT zoom_level,tile_column,tile_row,tile_id FROM source.map;
    REPLACE INTO images (tile_id,tile_data) SELECT tile_id,tile_data FROM source.images;"\
@@ -100,28 +100,26 @@ create_structure(){
    sqlite3 $DEST
 }
 
-mkdir -p output
-DEST=$SOURCEDIR/output/combined_regions.mbtiles
+DEST=$1
 
-# if region not specified as base, just pick one
-if [ $# -eq 1 ] && [ "$structure_flag" != 'true' ];then
+# if region not specified as base, it's an error`
+if [ $# -ne 1 ] ;then
    SOURCE=$SOURCEDIR/$1 
 else 
    SOURCE=`ls $SOURCEDIR/*.mbtiles 2>/dev/null | head -n1`
 fi
 if [ "$structure_flag" == "true" ];then
    create_structure
-else
-   echo "copying $SOURCE to $DEST"
-   cp $SOURCE $DEST
+   exit 1
 fi
 
-for f in `ls $SOURCEDIR/*.mbtiles`;do
-   if [ "$SOURCE" == $f ] && [ "$structure_flag" != "true" ];then
+for f in `ls *.mbtiles`;do
+   if [ "$1" == $f ] && [ "$structure_flag" != "true" ];then
       echo skipping $f
       continue
    fi
-   append_data $f
+   append_this=$f
+   append_data $append_this
 done
 
 # the vacuum command will collapse out any garbage space
